@@ -1,6 +1,14 @@
-FROM jupyter/scipy-notebook:latest
+FROM mcr.microsoft.com/dotnet/core/sdk:3.0 AS extensions_builder
 
-# Install .NET CLI dependencies
+WORKDIR /src
+
+COPY ./src/ ./
+
+RUN dotnet build ./Microsoft.ML.DotNet.Interactive.Extensions -c Release
+RUN dotnet pack ./Microsoft.ML.DotNet.Interactive.Extensions -c Release -o /out
+
+
+FROM jupyter/scipy-notebook:latest
 
 ARG NB_USER=jovyan
 ARG NB_UID=1000
@@ -51,9 +59,8 @@ RUN dotnet help
 # latest dotnet-try everytime we change sources.
 COPY ./NotebookExamples/ ${HOME}/Notebooks/
 COPY ./NuGet.config ${HOME}/nuget.config
-COPY ./src/ ${HOME}/src/
 
-RUN mkdir ${HOME}/packages/ ${HOME}/localNuget/
+COPY --from=extensions_builder /out/*.nupkg ${HOME}/localNuget/
 
 RUN chown -R ${NB_UID} ${HOME}
 USER ${USER}
@@ -66,16 +73,6 @@ RUN echo "$PATH"
 
 # Install kernel specs
 RUN dotnet try jupyter install
-
-# Build extensions
-RUN dotnet build ${HOME}/src/Microsoft.ML.DotNet.Interactive.Extensions -c Release 
-RUN dotnet pack ${HOME}/src/Microsoft.ML.DotNet.Interactive.Extensions -c Release 
-
-# Publish nuget if there is any
-WORKDIR ${HOME}/src/
-RUN dotnet nuget push **/*.nupkg -s ${HOME}/localNuget/
-
-RUN rm -fr ${HOME}/src/
 
 # Set root to Notebooks
 WORKDIR ${HOME}/Notebooks/
